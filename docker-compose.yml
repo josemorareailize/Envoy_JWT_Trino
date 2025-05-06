@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: test1
+    volumes:
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306"
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    # build: ./sqlserver
+    environment:
+      SA_PASSWORD: "YourStrong!Passw0rd"
+      ACCEPT_EULA: "Y"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+  
+  sqlserver-init:
+    image: mcr.microsoft.com/mssql-tools
+    depends_on:
+      - sqlserver
+    volumes:
+      - ./sqlserver/sqlserver-init/setup.sql:/sql/setup.sql
+      - ./sqlserver/sqlserver-init/entrypoint.sh:/entrypoint.sh
+    entrypoint: ["/bin/bash", "/entrypoint.sh"]
+
+  trino:
+    image: trinodb/trino:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+      - sqlserver
+    volumes:
+      - ./trino/etc:/etc/trino
+
+  envoy:
+    image: envoyproxy/envoy:v1.29-latest
+    ports:
+      - "8888:8888"
+      - "8001:8001"  # optional: admin API port
+    volumes:
+      - ./envoy/envoy.yaml:/etc/envoy/envoy.yaml
+    command:
+      - /usr/local/bin/envoy
+      - -c
+      - /etc/envoy/envoy.yaml
+      - --log-level
+      - debug
+    depends_on:
+      - trino
+
+  # auth_service:
+  #   build:
+  #     context: ../5-Node-App
+  #   ports:
+  #     - "8081:8081"
+
+volumes:
+  # mysql_data:
+  sqlserver_data:
