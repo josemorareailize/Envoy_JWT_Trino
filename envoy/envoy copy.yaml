@@ -1,0 +1,123 @@
+node:
+  id: ingress
+  cluster: ingress-cluster
+
+layered_runtime:
+  layers:
+    - name: static_layer
+      static_layer:
+        envoy:
+          logging:
+            level: debug
+static_resources:
+  listeners:
+    - name: listener_0
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 8888
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ingress_http
+                route_config:
+                  name: local_route
+                  virtual_hosts:
+                    - name: trino_service
+                      domains: ["*"]
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            cluster: trino
+                http_filters:
+                  # - name: envoy.filters.http.lua
+                  #   typed_config:
+                  #     "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+                  #     inline_code: |
+                  #       function envoy_on_request(request_handle)
+                  #           -- Modify the :path header before the request goes to the ext_authz filter
+                  #           local original_path = request_handle:headers():get(":path")
+                  #           if original_path then
+                  #               -- Rewrite the path to remove unwanted segments (e.g., /v1/statement)
+                  #               local new_path = "/api/validate"  -- Adjust this based on your logic
+                  #               request_handle:headers():replace(":path", new_path)
+                  #           end
+                  #       end
+                  - name: envoy.filters.http.ext_authz
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                      http_service:
+                        server_uri:
+                          uri: http://auth_service:8081
+                          cluster: auth_service
+                          timeout: 0.25s                      
+                        # path_prefix: /api/validate
+                        authorization_request:
+                          allowed_headers:
+                            patterns:
+                              - exact: Authorization
+                              # - safe_regex:
+                              #     google_re2: {}
+                              #     regex: ".*"
+                        authorization_response:
+                          allowed_upstream_headers:
+                            patterns:
+                              - exact: X-Trino-User
+                              # - safe_regex:
+                              #     google_re2: {}
+                              #     regex: ".*" 
+                      failure_mode_allow: false
+                  # - name: envoy.filters.http.lua
+                  #   typed_config:
+                  #     "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+                  #     inline_code: |
+                  #       function envoy_on_request(request_handle)
+                  #           -- Modify the :path header before the request goes to the ext_authz filter
+                  #           local original_path = request_handle:headers():get(":path")
+                  #           if original_path then
+                  #               -- Rewrite the path to remove unwanted segments (e.g., /v1/statement)
+                  #               local new_path = "/v1/statement"  -- Adjust this based on your logic
+                  #               request_handle:headers():replace(":path", new_path)
+                  #           end
+                  #       end
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  clusters:
+    - name: trino
+      connect_timeout: 0.25s
+      type: strict_dns
+      lb_policy: round_robin
+      load_assignment:
+        cluster_name: trino
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: trino
+                      port_value: 8080
+    - name: auth_service
+      connect_timeout: 0.25s
+      type: LOGICAL_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: auth_service
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: auth_service
+                      port_value: 8081
+
+admin:
+  access_log_path: "/tmp/admin_access.log"
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 8001
