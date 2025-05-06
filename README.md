@@ -24,7 +24,7 @@ Because _Trino_ is not able to extract the user from _JWT_ we implement a _proxy
 
 _Envoy_ will recive any request targeting _Trino_ and depending of the endpoint requested, will enforce the _JWT_ validation, user extraction and injection of this user in the `X-Trino-User` header of the upstream request.
 
-![Architecture](images\architecture.png)
+![Architecture](images/architecture.png)
 
 ### Request/Response flow
 
