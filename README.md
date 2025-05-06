@@ -155,7 +155,7 @@ Note that `localhost:8888` is the address where `Envoy` will be listening to any
                 clear_route_cache: true
     ```
 
-    As depicted above, the uri of the external service is `http://auth_service:8081//api/validate` and how to reach to this service is defined in the `cluster` _auth_service_.
+    As depicted above, the uri of the external service is `http://auth_service:8081//api/validate` (this is the repo fo this REST API [JWT-Validation](https://github.com/josemorareailize/JWT-Validator)) and how to reach to this service is defined in the `cluster` _auth_service_.
 
     ```
         - name: auth_service
